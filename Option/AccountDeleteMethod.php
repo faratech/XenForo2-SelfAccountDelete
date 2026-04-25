@@ -7,7 +7,7 @@ use XF\Option\AbstractOption;
 
 class AccountDeleteMethod extends AbstractOption
 {
-	public static function renderOption(\XF\Entity\Option $option, array $htmlParams)
+	public static function renderOption(Option $option, array $htmlParams)
 	{
 		/** @var \XF\Repository\UserGroup $userGroupRepo */
 		$userGroupRepo = \XF::repository('XF:UserGroup');
@@ -25,7 +25,11 @@ class AccountDeleteMethod extends AbstractOption
 			'remove_email' => false,
 			'ban_email' => false,
 			'remove_password' => false,
-			'disabled_group_id' => 0
+			'remove_avatar' => false,
+			'remove_profile_banner' => false,
+			'remove_profile_info' => false,
+			'change_privacy' => false,
+			'disabled_group_id' => 0,
 		];
 
 		if (empty($optionValue['disable_options']))

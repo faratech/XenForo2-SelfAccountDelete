@@ -11,6 +11,7 @@ class SendDeleteReminders extends AbstractJob
 	{
 		$startTime = microtime(true);
 
+		/** @var \LiamW\AccountDelete\Repository\AccountDelete $repository */
 		$repository = XF::repository('LiamW\AccountDelete:AccountDelete');
 		$toRemind = $repository->findAccountsToRemind()->fetch();
 
@@ -33,9 +34,12 @@ class SendDeleteReminders extends AbstractJob
 			}
 		}
 
+		/** @var \LiamW\AccountDelete\Entity\AccountDelete $item */
 		foreach ($toRemind AS $item)
 		{
-			XF::service('LiamW\AccountDelete:AccountDelete', $item->User)->sendReminderEmail();
+			/** @var \LiamW\AccountDelete\Service\AccountDelete $deleteService */
+			$deleteService = XF::service('LiamW\AccountDelete:AccountDelete', $item->User);
+			$deleteService->sendReminderEmail();
 
 			if (microtime(true) - $startTime >= $maxRunTime)
 			{
@@ -48,7 +52,7 @@ class SendDeleteReminders extends AbstractJob
 
 	public function getStatusMessage()
 	{
-		return \XF::phrase('liamw_accountdelete_sending_user_deletion_reminders');
+		return XF::phrase('liamw_accountdelete_sending_user_deletion_reminders');
 	}
 
 	public function canCancel()

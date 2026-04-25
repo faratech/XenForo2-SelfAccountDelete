@@ -7,7 +7,6 @@ use XF\AddOn\StepRunnerInstallTrait;
 use XF\AddOn\StepRunnerUpgradeTrait;
 use XF\Db\Schema\Alter;
 use XF\Db\Schema\Create;
-use XF\Util\Php;
 
 class Setup extends AbstractSetup
 {
@@ -26,8 +25,10 @@ class Setup extends AbstractSetup
 			$table->addColumn('completion_date', 'int')->nullable()->setDefault(null);
 			$table->addColumn('status', 'enum', ['pending', 'complete', 'complete_manual', 'cancelled'])->setDefault('pending');
 			$table->addColumn('reminder_sent', 'bool')->setDefault(0);
+			$table->addColumn('thread_id', 'int')->setDefault(0);
 			$table->addKey('user_id');
 			$table->addKey('username');
+			$table->addKey('thread_id');
 		});
 	}
 
@@ -59,40 +60,63 @@ class Setup extends AbstractSetup
 
 	public function upgrade1020034Step1()
 	{
-		$this->db()->query("UPDATE xf_liamw_accountdelete_account_deletions SET status='complete_manual' WHERE status='pending' AND (SELECT user.user_id FROM xf_user AS user WHERE user.user_id=xf_liamw_accountdelete_account_deletions.user_id) IS NULL");
+		$this->db()->query("
+			UPDATE xf_liamw_accountdelete_account_deletions
+			SET status='complete_manual'
+			WHERE status='pending' 
+			  AND (SELECT user.user_id FROM xf_user AS user WHERE user.user_id=xf_liamw_accountdelete_account_deletions.user_id) IS NULL
+		");
+	}
+
+	// 2.0.5
+
+	public function upgrade2000500Step1()
+	{
+		$this->schemaManager()->alterTable('xf_liamw_accountdelete_account_deletions', function(Alter $table)
+		{
+			$table->addColumn('thread_id', 'int')->setDefault(0);
+			$table->addKey('thread_id');
+		});
 	}
 
 	public function postUpgrade($previousVersion, array &$stateChanges)
 	{
-		$this->app->jobManager()->cancelUniqueJob('lwAccountDeleteReminder');
-		$this->app->jobManager()->cancelUniqueJob('lwAccountDeleteRunner');
+		$jobManager = $this->app->jobManager();
+
+		$jobManager->cancelUniqueJob('lwAccountDeleteReminder');
+		$jobManager->cancelUniqueJob('lwAccountDeleteRunner');
 
 		// Schedule the reminder/deletion jobs
+
+		/** @var \LiamW\AccountDelete\Repository\AccountDelete $repository */
 		$repository = \XF::repository('LiamW\AccountDelete:AccountDelete');
 
-		if ($nextRemindTime = $repository->getNextRemindTime())
+		$nextRemindTime = $repository->getNextRemindTime();
+		if ($nextRemindTime)
 		{
-			$this->app->jobManager()->enqueueLater('lwAccountDeleteReminder', $nextRemindTime, 'LiamW\AccountDelete:SendDeleteReminders');
+			$jobManager->enqueueLater('lwAccountDeleteReminder', $nextRemindTime, 'LiamW\AccountDelete:SendDeleteReminders');
 		}
-
-		if ($nextDeletionTime = $repository->getNextDeletionTime())
+		$nextDeletionTime = $repository->getNextDeletionTime();
+		if ($nextDeletionTime)
 		{
-			$this->app->jobManager()->enqueueLater('lwAccountDeleteRunner', $nextDeletionTime, 'LiamW\AccountDelete:DeleteAccounts');
+			$jobManager->enqueueLater('lwAccountDeleteRunner', $nextDeletionTime, 'LiamW\AccountDelete:DeleteAccounts');
 		}
 	}
 
 	public function onActiveChange($newActive, array &$jobList)
 	{
+		$jobManager = $this->app->jobManager();
+
 		if ($newActive)
 		{
 			// Can't use the jobList array as the atomic runner doesn't support future resumes
-			$this->app->jobManager()->enqueueUnique('lwAccountDeleteReminder', 'LiamW\AccountDelete:SendDeleteReminders');
-			$this->app->jobManager()->enqueueUnique('lwAccountDeleteRunner', 'LiamW\AccountDelete:DeleteAccounts');
+			$jobManager->enqueueUnique('lwAccountDeleteReminder', 'LiamW\AccountDelete:SendDeleteReminders');
+			$jobManager->enqueueUnique('lwAccountDeleteRunner', 'LiamW\AccountDelete:DeleteAccounts');
 		}
 		else
 		{
-			$this->app->jobManager()->cancelUniqueJob('lwAccountDeleteReminder');
-			$this->app->jobManager()->cancelUniqueJob('lwAccountDeleteRunner');
+			$jobManager->cancelUniqueJob('lwAccountDeleteReminder');
+			$jobManager->cancelUniqueJob('lwAccountDeleteRunner');
 		}
 	}
 

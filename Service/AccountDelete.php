@@ -14,7 +14,7 @@ use XF\Service\AbstractService;
 class AccountDelete extends AbstractService
 {
 	/**
-	 * @var User
+	 * @var User|\LiamW\AccountDelete\XF\Entity\User
 	 */
 	protected $user;
 	protected $originalUsername;
@@ -25,174 +25,30 @@ class AccountDelete extends AbstractService
 	 */
 	protected $accountDeletion;
 
-	protected $controller;
-
 	protected $renameTo;
 	protected $banEmail;
 	protected $removeEmail;
+	protected $removeAvatar;
+	protected $removeProfileBanner;
+	protected $removeProfileInfo;
+	protected $closePrivacy;
 	protected $addUserGroup;
 
-	protected $sendEmail;
+	protected $sendEmail = true;
 
-	public function __construct(App $app, User $user, Controller $controller = null)
+	public function __construct(App $app, User $user)
 	{
 		parent::__construct($app);
+
+		/** @var \LiamW\AccountDelete\XF\Entity\User $user */
 
 		$this->user = $user;
 		$this->accountDeletion = $user->PendingAccountDeletion;
 		$this->originalUsername = $user->username;
 		$this->originalEmail = $user->email;
-		$this->controller = $controller;
 	}
 
-	public function scheduleDeletion($reason, $sendEmail = true, $immediateExecution = true)
-	{
-		if (!$this->controller)
-		{
-			throw new InvalidArgumentException("Scheduling account deletion requires controller to be passed to service");
-		}
-
-		/** @var \LiamW\AccountDelete\Entity\AccountDelete $accountDeletion */
-		$accountDeletion = $this->user->getRelationOrDefault('PendingAccountDeletion');
-		$accountDeletion->reason = $reason;
-		$this->user->save();
-
-		/** @var Login $loginPlugin */
-		$loginPlugin = $this->controller->plugin('XF:Login');
-		$loginPlugin->logoutVisitor();
-
-		if ($immediateExecution && $accountDeletion->end_date <= XF::$time)
-		{
-			XF::runLater(function () use ($accountDeletion)
-			{
-				$this->executeDeletion();
-			});
-		}
-		else
-		{
-			$repository = $this->repository('LiamW\AccountDelete:AccountDelete');
-
-			if ($repository->getNextRemindTime())
-			{
-				$this->app->jobManager()->enqueueLater('lwAccountDeleteReminder', $repository->getNextRemindTime(), 'LiamW\AccountDelete:SendDeleteReminders');
-			}
-			else
-			{
-				$this->app->jobManager()->cancelUniqueJob('lwAccountDeleteReminder');
-			}
-
-			$this->app->jobManager()->enqueueLater('lwAccountDeleteRunner', $repository->getNextDeletionTime(), 'LiamW\AccountDelete:DeleteAccounts');
-
-			if ($sendEmail)
-			{
-				$this->sendScheduledEmail();
-			}
-		}
-	}
-
-	public function cancelDeletion($forced = false, $sendEmail = true)
-	{
-		if ($this->accountDeletion)
-		{
-			$this->accountDeletion->status = "cancelled";
-			$this->accountDeletion->save();
-
-			$repository = $this->repository('LiamW\AccountDelete:AccountDelete');
-
-			if ($repository->getNextRemindTime())
-			{
-				$this->app->jobManager()->enqueueLater('lwAccountDeleteReminder', $repository->getNextRemindTime(), 'LiamW\AccountDelete:SendDeleteReminders');
-			}
-			else
-			{
-				$this->app->jobManager()->cancelUniqueJob('lwAccountDeleteReminder');
-			}
-
-			if ($repository->getNextDeletionTime())
-			{
-				$this->app->jobManager()->enqueueLater('lwAccountDeleteRunner', $repository->getNextDeletionTime(), 'LiamW\AccountDelete:DeleteAccounts');
-			}
-			else
-			{
-				$this->app->jobManager()->cancelUniqueJob('lwAccountDeleteRunner');
-			}
-
-			if ($sendEmail)
-			{
-				$this->sendCancelledEmail($forced);
-			}
-		}
-	}
-
-	public function executeDeletion($sendEmail = true)
-	{
-		if (!$this->accountDeletion || $this->accountDeletion->end_date > XF::$time)
-		{
-			return;
-		}
-
-		if (!$this->user->canDeleteSelf())
-		{
-			$this->cancelDeletion(true, $sendEmail);
-
-			return;
-		}
-
-		$this->sendEmail = $sendEmail;
-
-		$methodOption = XF::options()->liamw_accountdelete_deletion_method;
-
-		if (XF::options()->liamw_accountdelete_randomise_username)
-		{
-			$this->renameTo($this->repository('LiamW\AccountDelete:AccountDelete')->getDeletedUserUsername($this->user));
-		}
-
-		switch ($methodOption['mode'])
-		{
-			case 'disable':
-				$this->removeEmail($methodOption['disable_options']['remove_email']);
-				$this->banEmail($methodOption['disable_options']['ban_email']);
-				$this->addUserGroup($methodOption['disable_options']['disabled_group_id']);
-
-				if ($methodOption['disable_options']['remove_password'])
-				{
-					$this->user->getRelationOrDefault('Auth')->setNoPassword();
-
-					$userProfile = $this->user->getRelationOrDefault('Profile');
-
-					foreach ($this->user->ConnectedAccounts AS $connectedAccount)
-					{
-						$connectedAccount->delete();
-
-						/** @var XF\Entity\ConnectedAccountProvider $provider */
-						$provider = $this->em()->find('XF:ConnectedAccountProvider', $connectedAccount->provider);
-						if ($provider)
-						{
-							$storageState = $provider->getHandler()->getStorageState($provider, $this->user);
-							$storageState->clearProviderData();
-						}
-
-						$profileConnectedAccounts = $userProfile->connected_accounts;
-						unset($profileConnectedAccounts[$connectedAccount->provider]);
-						$userProfile->connected_accounts = $profileConnectedAccounts;
-					}
-				}
-
-				$this->doDisable();
-				break;
-			case 'delete':
-				$this->banEmail($methodOption['delete_options']['ban_email']);
-
-				$this->doDelete();
-				break;
-			default:
-				throw new UnexpectedValueException('Unknown option value encountered during member deletion');
-		}
-
-		$this->finaliseDeleteDisable();
-	}
-
-	protected function renameTo($name)
+	public function setRenameTo($name)
 	{
 		if ($name === $this->user->username)
 		{
@@ -204,22 +60,136 @@ class AccountDelete extends AbstractService
 		}
 	}
 
-	protected function banEmail($option)
+	public function setBanEmail($option)
 	{
 		$this->banEmail = $option;
 	}
 
-	protected function removeEmail($option)
+	public function setRemoveEmail($option)
 	{
 		$this->removeEmail = $option;
+	}
+
+	public function setRemoveAvatar($option)
+	{
+		$this->removeAvatar = $option;
+	}
+
+	public function setRemoveProfileBanner($option)
+	{
+		$this->removeProfileBanner = $option;
+	}
+
+	public function setRemoveProfileInfo($option)
+	{
+		$this->removeProfileInfo = $option;
+	}
+
+	public function setClosePrivacy($option)
+	{
+		$this->closePrivacy = $option;
 	}
 
 	/**
 	 * @param int|null $userGroupId
 	 */
-	protected function addUserGroup($userGroupId)
+	public function setAddUserGroup($userGroupId)
 	{
 		$this->addUserGroup = $userGroupId;
+	}
+
+	public function setSendEmail($sendEmail = true)
+	{
+		$this->sendEmail = $sendEmail;
+	}
+
+	public function executeDeletion()
+	{
+		if (!$this->accountDeletion || $this->accountDeletion->end_date > XF::$time)
+		{
+			return;
+		}
+
+		if (!$this->user->canDeleteSelf())
+		{
+			/** @var Cancel $cancelService */
+			$cancelService = $this->service('LiamW\AccountDelete:Cancel', $this->accountDeletion);
+			$cancelService->setForced();
+			if (!$cancelService->validate($errors))
+			{
+				throw new \XF\PrintableException($errors);
+			}
+
+			$cancelService->save();
+			return;
+		}
+
+		$options = $this->app->options();
+		$methodOption = $options->liamw_accountdelete_deletion_method;
+
+		$usernameRandom = $options->liamw_accountdelete_randomise_username['enabled'] ?? false;
+		if ($usernameRandom)
+		{
+			/** @var \LiamW\AccountDelete\Repository\AccountDelete $accountDeleteRepo */
+			$accountDeleteRepo = $this->repository('LiamW\AccountDelete:AccountDelete');
+			$this->setRenameTo($accountDeleteRepo->getDeletedUserUsername($this->user));
+		}
+
+		switch ($methodOption['mode'])
+		{
+			case 'disable':
+				$this->setRemoveEmail($methodOption['disable_options']['remove_email'] ?? false);
+				$this->setRemoveAvatar($methodOption['disable_options']['remove_avatar'] ?? false);
+				$this->setRemoveProfileBanner($methodOption['disable_options']['remove_profile_banner'] ?? false);
+				$this->setRemoveProfileInfo($methodOption['disable_options']['remove_profile_info'] ?? false);
+				$this->setClosePrivacy($methodOption['disable_options']['change_privacy'] ?? false);
+				$this->setBanEmail($methodOption['disable_options']['ban_email'] ?? false);
+				$this->setAddUserGroup($methodOption['disable_options']['disabled_group_id'] ?? []);
+
+				$removePassword = $methodOption['disable_options']['remove_password'] ?? false;
+				if ($removePassword)
+				{
+					/** @var \XF\Entity\UserAuth $userAuth */
+					$userAuth = $this->user->getRelationOrDefault('Auth');
+					$userAuth->setNoPassword();
+
+					/** @var \XF\Entity\UserProfile $userProfile */
+					$userProfile = $this->user->getRelationOrDefault('Profile');
+
+					$connectedAccounts = $this->user->ConnectedAccounts;
+					if ($connectedAccounts)
+					{
+						foreach ($connectedAccounts as $connectedAccount)
+						{
+							$connectedAccount->delete();
+
+							/** @var XF\Entity\ConnectedAccountProvider $provider */
+							$provider = $this->em()->find('XF:ConnectedAccountProvider', $connectedAccount->provider);
+							if ($provider && $provider->getHandler())
+							{
+								$storageState = $provider->getHandler()->getStorageState($provider, $this->user);
+								$storageState->clearProviderData();
+							}
+
+							$profileConnectedAccounts = $userProfile->connected_accounts;
+							unset($profileConnectedAccounts[$connectedAccount->provider]);
+							$userProfile->connected_accounts = $profileConnectedAccounts;
+						}
+					}
+				}
+
+				$this->doDisable();
+				break;
+			case 'delete':
+				$this->setBanEmail($methodOption['delete_options']['ban_email'] ?? false);
+
+				$this->doDelete();
+				break;
+			default:
+				throw new UnexpectedValueException('Unknown option value encountered during member deletion');
+		}
+
+		$this->finaliseDeleteDisable();
 	}
 
 	protected function doRename()
@@ -271,6 +241,72 @@ class AccountDelete extends AbstractService
 			$this->sendCompletedEmail();
 		}
 
+		if ($this->removeAvatar && $this->user->avatar_date)
+		{
+			/** @var \XF\Service\User\Avatar $avatarService */
+			$avatarService = $this->service('XF:User\Avatar', $this->user);
+			$avatarService->logIp(false);
+			$avatarService->deleteAvatar();
+		}
+
+		if ($this->removeProfileBanner && $this->user->Profile && $this->user->Profile->banner_date)
+		{
+			/** @var \XF\Service\User\ProfileBanner $profileBannerService */
+			$profileBannerService = $this->service('XF:User\ProfileBanner', $this->user);
+			$profileBannerService->logIp(false);
+			$profileBannerService->deleteBanner();
+		}
+
+		if ($this->removeProfileInfo && $this->user->Profile)
+		{
+			$userProfile = $this->user->Profile;
+
+			$userProfile->setTrusted('dob_day', '');
+			$userProfile->setTrusted('dob_month', '');
+			$userProfile->setTrusted('dob_year', '');
+			$userProfile->setTrusted('signature', '');
+			$userProfile->setTrusted('website', '');
+			$userProfile->setTrusted('location', '');
+			$userProfile->setTrusted('about', '');
+
+			$fieldSet = $userProfile->custom_fields;
+			$fieldDefinition = $fieldSet->getDefinitionSet()->filterEditable($fieldSet, 'admin');
+			$customFieldsShown = array_keys($fieldDefinition->getFieldDefinitions());
+
+			if ($customFieldsShown)
+			{
+				$customFields = $userProfile->custom_fields_;
+				$emptyFields = array_map(function () {
+					return '';
+				}, $customFields);
+				$fieldSet->bulkSet($emptyFields, $customFieldsShown, 'admin', true);
+			}
+
+			$userProfile->preSave();
+			$errors = $userProfile->getErrors();
+			foreach ($errors as $key => $error)
+			{
+				\XF::logError("Account Delete: User {$this->user->user_id} '$key' profile saving error: $error");
+			}
+
+			if (!$userProfile->hasErrors())
+			{
+				$userProfile->saveIfChanged();
+			}
+		}
+
+		if ($this->closePrivacy && $this->user->Privacy)
+		{
+			$userPrivacy = $this->user->Privacy;
+			$userPrivacy->allow_view_profile = 'none';
+			$userPrivacy->allow_post_profile = 'none';
+			$userPrivacy->allow_send_personal_conversation = 'none';
+			$userPrivacy->allow_view_identities = 'none';
+			$userPrivacy->allow_receive_news_feed = 'none';
+
+			$userPrivacy->saveIfChanged();
+		}
+
 		// Remove email address after sending the completion email
 		if ($this->originalEmail && $this->removeEmail && $this->user->exists())
 		{
@@ -281,14 +317,20 @@ class AccountDelete extends AbstractService
 
 		if ($this->originalEmail && $this->banEmail)
 		{
-			if (!$this->repository('XF:Banning')->isEmailBanned($this->originalEmail, XF::app()->get('bannedEmails')))
+			/** @var \XF\Repository\Banning $banRepo */
+			$banRepo = $this->repository('XF:Banning');
+			if (!$banRepo->isEmailBanned($this->originalEmail, XF::app()->get('bannedEmails')))
 			{
-				$this->repository('XF:Banning')->banEmail($this->originalEmail, \XF::phrase('liamw_accountdelete_automated_ban_user_deleted_self'), $this->user);
+				$banRepo->banEmail(
+					$this->originalEmail,
+					XF::phrase('liamw_accountdelete_automated_ban_user_deleted_self'),
+					$this->user
+				);
 			}
 		}
 
 		$this->accountDeletion->completion_date = XF::$time;
-		$this->accountDeletion->status = "complete";
+		$this->accountDeletion->status = 'complete';
 		$this->accountDeletion->save();
 
 		$this->runPostDeleteJobs();
@@ -330,19 +372,6 @@ class AccountDelete extends AbstractService
 		}
 	}
 
-	public function sendScheduledEmail()
-	{
-		if (!$this->user->email || $this->user->user_state != 'valid')
-		{
-			return;
-		}
-
-		$mail = XF::mailer()->newMail();
-		$mail->setToUser($this->user);
-		$mail->setTemplate('liamw_accountdelete_delete_scheduled');
-		$mail->send();
-	}
-
 	public function sendReminderEmail()
 	{
 		if (!$this->user->email || $this->user->user_state != 'valid' || $this->accountDeletion->reminder_sent)
@@ -365,19 +394,6 @@ class AccountDelete extends AbstractService
 		XF::db()->commit();
 	}
 
-	public function sendCancelledEmail($forced = false)
-	{
-		if (!$this->user->email || $this->user->user_state != 'valid')
-		{
-			return;
-		}
-
-		$mail = XF::mailer()->newMail();
-		$mail->setToUser($this->user);
-		$mail->setTemplate('liamw_accountdelete_delete_cancelled', ['forced' => $forced]);
-		$mail->send();
-	}
-
 	public function sendCompletedEmail()
 	{
 		if (!$this->originalEmail)
@@ -387,8 +403,8 @@ class AccountDelete extends AbstractService
 
 		$mail = XF::mailer()->newMail();
 		$mail->setTo($this->originalEmail, $this->originalUsername);
-		$mail->setLanguage(\XF::app()->language($this->user->language_id));
-		$mail->setTemplate('liamw_accountdelete_delete_completed', ['time' => XF::$time]);
+		$mail->setLanguage(XF::app()->language($this->user->language_id));
+		$mail->setTemplate('liamw_accountdelete_delete_completed', ['time' => XF::$time, 'username' => $this->originalUsername]);
 		$mail->send();
 	}
 }

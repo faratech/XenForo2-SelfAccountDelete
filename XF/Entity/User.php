@@ -2,6 +2,10 @@
 
 namespace LiamW\AccountDelete\XF\Entity;
 
+/**
+ * @property \LiamW\AccountDelete\Entity\AccountDelete[] $AccountDeletionLogs
+ * @property \LiamW\AccountDelete\Entity\AccountDelete $PendingAccountDeletion
+ */
 class User extends XFCP_User
 {
 	public function canDeleteSelf(&$error = null)
@@ -13,6 +17,11 @@ class User extends XFCP_User
 			return false;
 		}
 
+		if ($this->is_banned)
+		{
+			return false;
+		}
+
 		if (!$this->hasPermission('general', 'lw_deleteAccount'))
 		{
 			return false;
@@ -21,7 +30,11 @@ class User extends XFCP_User
 		if (\XF::options()->liamw_accountdelete_repeat_delay)
 		{
 			$recentDeletionInitiation = $this->getRelationFinder('AccountDeletionLogs')
-				->order('initiation_date', 'desc')->where('status', '<>', 'pending')->pluckFrom('initiation_date')->fetch(1)->first();
+				->order('initiation_date', 'desc')
+				->where('status', '<>', 'pending')
+				->pluckFrom('initiation_date')
+				->fetch(1)
+				->first();
 
 			if ($recentDeletionInitiation && $recentDeletionInitiation > \XF::$time - (\XF::options()->liamw_accountdelete_repeat_delay * 24 * 60 * 60))
 			{

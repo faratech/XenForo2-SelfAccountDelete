@@ -3,33 +3,33 @@
 namespace LiamW\AccountDelete\Entity;
 
 use XF;
-use XF\Entity\User;
 use XF\Mvc\Entity\Entity;
 use XF\Mvc\Entity\Structure;
 
 /**
  * COLUMNS
- * @property int deletion_id
- * @property int user_id
- * @property string username
- * @property string|null reason
- * @property int initiation_date
- * @property int|null completion_date
- * @property string status
- * @property bool reminder_sent
+ * @property int $deletion_id
+ * @property int $user_id
+ * @property string $username
+ * @property string|null $reason
+ * @property int $initiation_date
+ * @property int|null $completion_date
+ * @property string $status
+ * @property bool $reminder_sent
+ * @property int $thread_id
  *
  * GETTERS
- * @property mixed end_date
+ * @property mixed $end_date
  *
  * RELATIONS
- * @property \XF\Entity\User User
+ * @property \XF\Entity\User $User
+ * @property \XF\Entity\Thread $Thread
  */
 class AccountDelete extends Entity
 {
 	protected function _setupDefaults()
 	{
-		$this->username = $this->_getDeferredValue(function()
-		{
+		$this->username = $this->_getDeferredValue(function () {
 			return $this->User->username;
 		});
 	}
@@ -57,7 +57,8 @@ class AccountDelete extends Entity
 			'initiation_date' => ['type' => self::UINT, 'default' => XF::$time],
 			'completion_date' => ['type' => self::UINT, 'nullable' => true],
 			'status' => ['type' => self::STR, 'allowedValues' => ['pending', 'complete', 'complete_manual', 'cancelled']],
-			'reminder_sent' => ['type' => self::BOOL, 'default' => 0]
+			'reminder_sent' => ['type' => self::BOOL, 'default' => 0],
+			'thread_id' => ['type' => self::UINT, 'default' => 0],
 		];
 		$structure->getters = [
 			'end_date' => true
@@ -68,7 +69,13 @@ class AccountDelete extends Entity
 				'type' => self::TO_ONE,
 				'conditions' => 'user_id',
 				'primary' => true
-			]
+			],
+			'Thread' => [
+				'entity' => 'XF:Thread',
+				'type' => self::TO_ONE,
+				'conditions' => 'thread_id',
+				'primary' => true
+			],
 		];
 
 		$structure->defaultWith = ['User'];

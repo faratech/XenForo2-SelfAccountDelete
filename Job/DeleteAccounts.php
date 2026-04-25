@@ -2,7 +2,7 @@
 
 namespace LiamW\AccountDelete\Job;
 
-use LiamW\AccountDelete\Entity\AccountDelete;
+
 use XF;
 use XF\Job\AbstractJob;
 
@@ -12,6 +12,7 @@ class DeleteAccounts extends AbstractJob
 	{
 		$startTime = microtime(true);
 
+		/** @var \LiamW\AccountDelete\Repository\AccountDelete $repository */
 		$repository = XF::repository('LiamW\AccountDelete:AccountDelete');
 		$toDelete = $repository->findAccountsToDelete()->fetch();
 
@@ -34,13 +35,14 @@ class DeleteAccounts extends AbstractJob
 			}
 		}
 
+		/** @var \LiamW\AccountDelete\Entity\AccountDelete $item */
 		foreach ($toDelete AS $item)
 		{
-			/** @var AccountDelete $item */
-
 			if ($item->User && $item->User->exists())
 			{
-				XF::service('LiamW\AccountDelete:AccountDelete', $item->User)->executeDeletion();
+				/** @var \LiamW\AccountDelete\Service\AccountDelete $deleteService */
+				$deleteService = XF::service('LiamW\AccountDelete:AccountDelete', $item->User);
+				$deleteService->executeDeletion();
 			}
 			else
 			{
@@ -70,6 +72,6 @@ class DeleteAccounts extends AbstractJob
 
 	public function canTriggerByChoice()
 	{
-		return false;
+		return true;
 	}
 }

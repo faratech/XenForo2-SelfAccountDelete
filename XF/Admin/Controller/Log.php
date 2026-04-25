@@ -14,7 +14,10 @@ class Log extends XFCP_Log
 		$page = $this->filterPage();
 		$perPage = 20;
 
-		$accountDeletionsFinder = $this->finder('LiamW\AccountDelete:AccountDelete')->setDefaultOrder('initiation_date', 'desc')->limitByPage($page, $perPage);
+		$accountDeletionsFinder = $this->finder('LiamW\AccountDelete:AccountDelete')
+			->setDefaultOrder('initiation_date', 'desc')
+			->limitByPage($page, $perPage);
+
 		$accountDeletions = $accountDeletionsFinder->fetch();
 
 		$viewParams = [
@@ -25,7 +28,7 @@ class Log extends XFCP_Log
 			'total' => $accountDeletionsFinder->total()
 		];
 
-		return $this->view('Log\AccountDeletion', 'liamw_accountdelete_user_delete_log', $viewParams);
+		return $this->view('XF:Log\AccountDeletion', 'liamw_accountdelete_user_delete_log', $viewParams);
 	}
 
 	public function actionAccountDeletionCancel(ParameterBag $params)
@@ -41,7 +44,14 @@ class Log extends XFCP_Log
 
 		if ($this->isPost())
 		{
-			$this->service('LiamW\AccountDelete:AccountDelete', $accountDelete->User)->cancelDeletion();
+			/** @var \LiamW\AccountDelete\Service\Cancel $cancelService */
+			$cancelService = $this->service('LiamW\AccountDelete:Cancel', $accountDelete);
+			if (!$cancelService->validate($errors))
+			{
+				return $this->error($errors);
+			}
+
+			$cancelService->save();
 
 			return $this->redirect($this->buildLink('logs/account-deletion'));
 		}
@@ -59,6 +69,8 @@ class Log extends XFCP_Log
 	 * @param $deletionId
 	 *
 	 * @return \XF\Mvc\Entity\Entity|AccountDelete
+	 * @throws \XF\Mvc\Reply\Exception
+	 * @noinspection PhpReturnDocTypeMismatchInspection
 	 */
 	protected function assertDeletionExists($deletionId)
 	{

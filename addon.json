@@ -1,15 +1,15 @@
 {
     "legacy_addon_id": "",
-    "title": "Member Self Delete",
+    "title": "[Liam W] (RIP) Member Self Delete",
     "description": "Gives board members the ability to delete or disable their accounts.",
-    "version_id": 1020171,
-    "version_string": "1.2.1.1",
-    "dev": "Liam Williams",
-    "dev_url": "https://lw-addons.net",
+    "version_id": 2000597,
+    "version_string": "2.0.5 Patch Level 7",
+    "dev": "Ozzy47",
+    "dev_url": "https://snogssite.com/",
     "faq_url": "",
-    "support_url": "https://xenforo.com/community/threads/member-self-delete.132216/",
+    "support_url": "https://snogssite.com/threads/liam-w-rip-member-self-delete.3244/",
     "extra_urls": {
-        "Contribute on GitHub": "https://github.com/lw-addons/XenForo2-SelfAccountDelete"
+        "Donate to OzzModz": "https://www.paypal.com/paypalme/ozzy47"
     },
     "require": {
         "XF": [
@@ -17,5 +17,5 @@
             "XenForo 2.1.0 or above"
         ]
     },
-    "icon": "logo.png"
+    "icon": ""
 }
