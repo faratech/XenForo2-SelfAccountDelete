@@ -11,7 +11,7 @@
     "src/addons/LiamW/AccountDelete/Option/AccountDeleteMethod.php": "222de5d1de0330468f82bbbf2d5be49d711a00a9054d9f80af32b1aad0a240f4",
     "src/addons/LiamW/AccountDelete/Pub/Controller/AccountDeletion.php": "4ef0a059f8e90a397c44d590a19dadd054086332c9164a542363eeee795224f5",
     "src/addons/LiamW/AccountDelete/Repository/AccountDelete.php": "49a6a7a98cb58361e3f879f24959c549af08050b94d6eb8cfc24e27fb4a8832b",
-    "src/addons/LiamW/AccountDelete/Service/AccountDelete.php": "2b488942da25e087f650736d2356d6b510d0f32abf1424a12ea278cc736e947c",
+    "src/addons/LiamW/AccountDelete/Service/AccountDelete.php": "71de50d4f23b7c46f986ca6afd48bd4d516b69484a1d2710c4b698b0cd5d678b",
     "src/addons/LiamW/AccountDelete/Service/Cancel.php": "a99bbaf9cf8b4fc6863d9c179d6a96361c1462ae3c90453ad2c644841eefc1f9",
     "src/addons/LiamW/AccountDelete/Service/Schedule.php": "98c8cbe80d75ea974992e87528943724d5a6e7fff8a623c9f8f6a22901953181",
     "src/addons/LiamW/AccountDelete/Setup.php": "5a138f08e9c363deaee794cf88ce9e3c4ab376e9cf8936b5a4fad37892b92ced",

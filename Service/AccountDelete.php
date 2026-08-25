@@ -110,6 +110,44 @@ class AccountDelete extends AbstractService
 			return;
 		}
 
+		// Local patch (2026-08 audit): the executor previously took neither a claim nor a
+		// transaction, so an admin-triggered run could overlap the scheduled job run on the
+		// same account (duplicate work/emails, partial states). Claim the row CAS-style:
+		// SELECT ... FOR UPDATE inside a transaction, re-checking status under the lock.
+		// A concurrent runner blocks here, then sees a non-pending status once we commit
+		// and bails. Any throw rolls back all work including the claim.
+		$db = $this->db();
+
+		$db->beginTransaction();
+		try
+		{
+			$claimed = $db->fetchRow("
+				SELECT deletion_id, status
+				FROM xf_liamw_accountdelete_account_deletions
+				WHERE deletion_id = ? AND status = ?
+				FOR UPDATE
+			", [$this->accountDeletion->deletion_id, 'pending']);
+			if (!$claimed)
+			{
+				// Lost the race - already executed or cancelled by a concurrent run.
+				$db->rollback();
+				return;
+			}
+
+			$this->executeDeletionClaimed();
+
+			$db->commit();
+		}
+		catch (\Throwable $e)
+		{
+			$db->rollback();
+
+			throw $e;
+		}
+	}
+
+	protected function executeDeletionClaimed()
+	{
 		if (!$this->user->canDeleteSelf())
 		{
 			/** @var Cancel $cancelService */
@@ -355,6 +393,13 @@ class AccountDelete extends AbstractService
 
 		if (!$user->exists())
 		{
+			// Local patch (2026-08 audit): GDPR/IP note. The UserDeleteCleanUp
+			// job below purges xf_ip rows for content_type='user' (login/
+			// session IPs), matching XF core's own deletion policy; core
+			// deliberately leaves *content* IPs (posts/conversations) in
+			// place ("leave content IPs" in DeleteCleanUpService), so there is
+			// no existing safe per-user pattern to purge those here without
+			// breaking retained-content IP logs.
 			$jobList[] = [
 				'XF:UserDeleteCleanUp',
 				[
@@ -381,17 +426,29 @@ class AccountDelete extends AbstractService
 
 		XF::db()->beginTransaction();
 
-		$mail = XF::mailer()->newMail();
-		$mail->setToUser($this->user);
-		$mail->setTemplate('liamw_accountdelete_delete_imminent');
-		$mail->queue();
+		try
+		{
+			$mail = XF::mailer()->newMail();
+			$mail->setToUser($this->user);
+			$mail->setTemplate('liamw_accountdelete_delete_imminent');
+			$mail->queue();
 
-		/** @var \LiamW\AccountDelete\Entity\AccountDelete $pendingDeletion */
-		$pendingDeletion = $this->accountDeletion;
-		$pendingDeletion->reminder_sent = 1;
-		$pendingDeletion->save(true, false);
+			/** @var \LiamW\AccountDelete\Entity\AccountDelete $pendingDeletion */
+			$pendingDeletion = $this->accountDeletion;
+			$pendingDeletion->reminder_sent = 1;
+			$pendingDeletion->save(true, false);
 
-		XF::db()->commit();
+			XF::db()->commit();
+		}
+		catch (\Throwable $e)
+		{
+			// Local patch (2026-08 audit): the transaction was previously
+			// opened without try/rollback - a throw here left an open
+			// transaction and the reminder unmarked.
+			XF::db()->rollback();
+
+			throw $e;
+		}
 	}
 
 	public function sendCompletedEmail()
