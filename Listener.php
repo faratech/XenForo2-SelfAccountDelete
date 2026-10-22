@@ -69,7 +69,9 @@ class Listener
 		{
 			/** @var \LiamW\AccountDelete\XF\Entity\User $visitor */
 			$visitor = XF::visitor();
-			if ($visitor->PendingAccountDeletion
+			// Guests have no deletion rows; reading the relation for user 0 cost a query on every guest dispatch.
+			if ($visitor->user_id
+				&& $visitor->PendingAccountDeletion
 				&& !($controller instanceof XF\Pub\Controller\Logout)
 				&& !($controller instanceof XF\Pub\Controller\Account && ($action == 'Delete' || $action == 'DeleteCancel'))
 				&& !$controller->isPost()

@@ -6,7 +6,7 @@
     "src/addons/LiamW/AccountDelete/Job/DeleteAccounts.php": "3ff640939007fdeec3d901e35ab21fb5d6ce9915c12f2e5250c045c2d2b0787c",
     "src/addons/LiamW/AccountDelete/Job/SendDeleteReminders.php": "7f6a524847ebddbc35a68afa36b01b5b707e00e44dd1f602855b660d425cd34b",
     "src/addons/LiamW/AccountDelete/LICENSE": "f93768d9696f58a199aef1e3699097324d17424d411071e482591359199d353e",
-    "src/addons/LiamW/AccountDelete/Listener.php": "a9f11f96e986e8e5f57744dc134eb73b8c1305428c91cc2778fe353f7d7bcfc4",
+    "src/addons/LiamW/AccountDelete/Listener.php": "9a1d83ff64fb855cea29065c4b2d6253bb0aeadff7adfa4dbd2a81acdc0a1778",
     "src/addons/LiamW/AccountDelete/logo.png": "9fb619d89cdaeb1d7a54a8955bb169f031ddab0558b97ef782797fa934abdbc4",
     "src/addons/LiamW/AccountDelete/Option/AccountDeleteMethod.php": "222de5d1de0330468f82bbbf2d5be49d711a00a9054d9f80af32b1aad0a240f4",
     "src/addons/LiamW/AccountDelete/Pub/Controller/AccountDeletion.php": "4ef0a059f8e90a397c44d590a19dadd054086332c9164a542363eeee795224f5",
